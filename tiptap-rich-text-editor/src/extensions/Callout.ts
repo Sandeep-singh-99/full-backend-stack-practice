@@ -16,17 +16,21 @@ declare module '@tiptap/core' {
 export const Callout = Node.create({
   name: 'callout',
   group: 'block',
-  content: 'block+',
+  content: 'inline*',
   defining: true,
-  draggable: true,
+  draggable: false,
 
   addAttributes() {
     return {
       emoji: {
         default: '💡',
+        parseHTML: element => element.getAttribute('emoji') || '💡',
+        renderHTML: attributes => ({ emoji: attributes.emoji }),
       },
       color: {
         default: 'blue', // blue, green, yellow, red, gray
+        parseHTML: element => element.getAttribute('color') || 'blue',
+        renderHTML: attributes => ({ color: attributes.color }),
       },
     };
   },

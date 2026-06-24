@@ -29,9 +29,7 @@ const createOnboardingDoc = (): Document => ({
   content: `
     <p>This is a high-performance, <strong>Notion-like rich text workspace</strong> built using React, Tiptap, and Tailwind CSS. All your documents are automatically saved to your browser's local storage.</p>
     
-    <div data-type="callout" emoji="💡" color="blue">
-      <p><strong>Quick Start Tip:</strong> Press <code>/</code> on a new line to trigger the Slash Command menu, or select some text to style it, add links, or change color highlights!</p>
-    </div>
+    <div data-type="callout" emoji="💡" color="blue"><strong>Quick Start Tip:</strong> Press <code>/</code> on a new line to trigger the Slash Command menu, or select some text to style it, add links, or change color highlights!</div>
     
     <h2>🚀 Feature Highlights</h2>
     <ul data-type="taskList">

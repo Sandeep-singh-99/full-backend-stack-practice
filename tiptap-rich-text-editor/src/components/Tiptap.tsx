@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -23,6 +23,8 @@ import CodeBlockComponent from './Editor/CodeBlockComponent';
 import SlashMenu from './Editor/SlashMenu';
 import BubbleMenu from './Editor/BubbleMenu';
 import TableBubbleMenu from './Editor/TableBubbleMenu';
+import { getMenuItems } from './Editor/menuItems';
+import type { SlashMenuItem } from './Editor/menuItems';
 
 const lowlight = createLowlight(common);
 
@@ -37,13 +39,26 @@ export default function Tiptap({ content, onChange, editorRef }: TiptapProps) {
   const [slashQuery, setSlashQuery] = useState('');
   const [slashAnchorRect, setSlashAnchorRect] = useState<DOMRect | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [menuFilteredCount, setMenuFilteredCount] = useState(0);
+
+  const menuItems = useMemo(() => getMenuItems(), []);
+
+  // Filter menu items based on query
+  const filteredItems = useMemo(() => {
+    const cleanQuery = slashQuery.toLowerCase().replace('/', '').trim();
+    if (!cleanQuery) return menuItems;
+
+    return menuItems.filter(
+      item =>
+        item.title.toLowerCase().includes(cleanQuery) ||
+        item.description.toLowerCase().includes(cleanQuery) ||
+        item.keywords.some(kw => kw.includes(cleanQuery))
+    );
+  }, [slashQuery, menuItems]);
 
   // Use refs to avoid stale closures in ProseMirror keydown handlers
   const slashMenuOpenRef = useRef(slashMenuOpen);
   const selectedIndexRef = useRef(selectedIndex);
-  const menuFilteredCountRef = useRef(menuFilteredCount);
-  const executeCommandRef = useRef<() => void>(() => {});
+  const filteredItemsRef = useRef(filteredItems);
 
   useEffect(() => {
     slashMenuOpenRef.current = slashMenuOpen;
@@ -54,8 +69,13 @@ export default function Tiptap({ content, onChange, editorRef }: TiptapProps) {
   }, [selectedIndex]);
 
   useEffect(() => {
-    menuFilteredCountRef.current = menuFilteredCount;
-  }, [menuFilteredCount]);
+    filteredItemsRef.current = filteredItems;
+  }, [filteredItems]);
+
+  // Reset selected index when query changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [slashQuery]);
 
   const editor = useEditor({
     extensions: [
@@ -120,19 +140,38 @@ export default function Tiptap({ content, onChange, editorRef }: TiptapProps) {
       },
       handleKeyDown(_view, event) {
         if (slashMenuOpenRef.current) {
+          const items = filteredItemsRef.current;
+          const index = selectedIndexRef.current;
+
           if (event.key === 'ArrowDown') {
             event.preventDefault();
-            setSelectedIndex(prev => (prev + 1) % menuFilteredCountRef.current);
+            setSelectedIndex(prev => (prev + 1) % items.length);
             return true;
           }
           if (event.key === 'ArrowUp') {
             event.preventDefault();
-            setSelectedIndex(prev => (prev - 1 + menuFilteredCountRef.current) % menuFilteredCountRef.current);
+            setSelectedIndex(prev => (prev - 1 + items.length) % items.length);
             return true;
           }
           if (event.key === 'Enter') {
             event.preventDefault();
-            executeCommandRef.current();
+            const selectedItem = items[index];
+            if (selectedItem && editor) {
+              // Delete slash text using Tiptap chain
+              const { state } = editor;
+              const { selection } = state;
+              const { $from } = selection;
+              const currentLineText = $from.parent.textContent;
+              const slashIndex = currentLineText.lastIndexOf('/');
+              if (slashIndex !== -1) {
+                const fromPos = $from.pos - (currentLineText.length - slashIndex);
+                const toPos = $from.pos;
+                editor.chain().focus().deleteRange({ from: fromPos, to: toPos }).run();
+              }
+              // Run command
+              selectedItem.command(editor);
+            }
+            setSlashMenuOpen(false);
             return true;
           }
           if (event.key === 'Escape') {
@@ -220,19 +259,21 @@ export default function Tiptap({ content, onChange, editorRef }: TiptapProps) {
     };
   }, [editor]);
 
-  // Register command executor callback
-  const handleSlashMenuExecute = () => {
-    // The items list filtered inside SlashMenu matches this index
-    // We bind the click executor ref to a function that triggers on index selection
-    executeCommandRef.current = () => {
-      // We will let SlashMenu trigger the command directly by mounting it with keydown actions
-      const menuContainer = document.querySelector('.z-50 button.bg-zinc-100') as HTMLButtonElement;
-      if (menuContainer) {
-        menuContainer.click();
-      } else {
-        setSlashMenuOpen(false);
-      }
-    };
+  // Handle clicking items in the Slash Menu
+  const handleItemSelect = (item: SlashMenuItem) => {
+    if (!editor) return;
+    const { state } = editor;
+    const { selection } = state;
+    const { $from } = selection;
+    const currentLineText = $from.parent.textContent;
+    const slashIndex = currentLineText.lastIndexOf('/');
+    if (slashIndex !== -1) {
+      const fromPos = $from.pos - (currentLineText.length - slashIndex);
+      const toPos = $from.pos;
+      editor.chain().focus().deleteRange({ from: fromPos, to: toPos }).run();
+    }
+    item.command(editor);
+    setSlashMenuOpen(false);
   };
 
   if (!editor) return null;
@@ -248,16 +289,12 @@ export default function Tiptap({ content, onChange, editorRef }: TiptapProps) {
       {/* Slash Command Dropdown Menu */}
       <SlashMenu
         editor={editor}
-        query={slashQuery}
         isOpen={slashMenuOpen}
         onClose={() => setSlashMenuOpen(false)}
         anchorRect={slashAnchorRect}
         selectedIndex={selectedIndex}
-        setSelectedIndex={setSelectedIndex}
-        setMenuFilteredCount={count => {
-          setMenuFilteredCount(count);
-          handleSlashMenuExecute();
-        }}
+        filteredItems={filteredItems}
+        onItemSelect={handleItemSelect}
       />
 
       {/* The main editor viewport */}

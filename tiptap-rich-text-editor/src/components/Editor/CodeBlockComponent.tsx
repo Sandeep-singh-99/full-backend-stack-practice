@@ -79,9 +79,7 @@ export default function CodeBlockComponent({
 
       {/* Editor Node View Content */}
       <pre className="font-mono text-sm leading-relaxed overflow-x-auto">
-        <code>
-          <NodeViewContent />
-        </code>
+        <NodeViewContent as={"code" as any} />
       </pre>
     </NodeViewWrapper>
   );
